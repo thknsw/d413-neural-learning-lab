@@ -1,0 +1,63 @@
+name: Build neural audio and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages-d413
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v4
+        with:
+          path: audio
+          key: d413-neural-audio-v1-${{ hashFiles('curriculum.json', 'requirements.txt', 'scripts/generate_audio.py') }}
+      - name: Install speech generation library
+        run: python -m pip install -r requirements.txt
+      - name: Generate 60 lessons in three natural voices
+        run: python scripts/generate_audio.py --concurrency 2
+      - name: Assemble the published website
+        shell: bash
+        run: |
+          mkdir -p public
+          cp index.html public/index.html
+          cp -r audio public/audio
+          touch public/.nojekyll
+      - name: Save the complete site and MP3s as a downloadable ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: D413-Neural-Audio-Lab-Offline
+          path: public/
+          retention-days: 30
+      - uses: actions/configure-pages@v5
+      - name: Upload GitHub Pages website
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: public
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Publish website
+        id: deployment
+        uses: actions/deploy-pages@v4

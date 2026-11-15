@@ -18,17 +18,19 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - uses: actions/cache@v4
-        with:
-          path: audio
-          key: d413-neural-audio-v1-${{ hashFiles('curriculum.json', 'requirements.txt', 'scripts/generate_audio.py') }}
-      - name: Install speech generation library
-        run: python -m pip install -r requirements.txt
-      - name: Generate 60 lessons in three natural voices
-        run: python scripts/generate_audio.py --concurrency 2
+      - name: Verify the included recordings
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("curriculum.json").read_text())
+          lessons = [lesson["id"] for section in data["sections"] for lesson in section["lessons"]]
+          tracks = {f"audio/{voice}/{lesson}.mp3" for voice in ("jenny", "andrew", "sonia") for lesson in lessons}
+          manifest = json.loads(Path("audio/manifest.json").read_text())
+          assert len(tracks) == 180 and tracks == set(manifest["audioFiles"])
+          for track in tracks:
+              assert Path(track).stat().st_size > 5000, track
       - name: Assemble the published website
         shell: bash
         run: |
@@ -42,7 +44,6 @@ jobs:
           name: D413-Neural-Audio-Lab-Offline
           path: public/
           retention-days: 30
-      - uses: actions/configure-pages@v5
       - name: Upload GitHub Pages website
         uses: actions/upload-pages-artifact@v4
         with:
